@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: shahednykbot
+    runtime: python
+    buildCommand: ""
+    startCommand: "python shahednykbot.py"
+    pythonVersion: 3.10
