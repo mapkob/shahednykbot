@@ -6,6 +6,7 @@ from telethon.tl.types import MessageMediaPhoto
 from telethon.errors import SessionPasswordNeededError
 from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import (
+    Application,
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
@@ -53,7 +54,7 @@ async def situation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     messages = await fetch_latest_posts()
     if messages:
         for msg in messages:
-            await update.message.reply_text(msg)
+            await update.message.reply_text(msg, parse_mode='HTML')
     else:
         await update.message.reply_text("✅ Все спокійно, нічого нового не зафіксовано.")
 
@@ -94,12 +95,17 @@ async def fetch_latest_posts():
                 if msg.text:
                     lower_text = msg.text.lower()
                     if any(kw in lower_text for kw in keywords):
+                        if 'https://t.me/' in lower_text or 'підписуйтесь' in lower_text:
+                            continue  # прибираємо рекламу
                         text_matched = True
                         funny = random.choice(humor)
-                        messages.append(f"📡 {channel.split('/')[-1]}:\n{funny}\n\n{msg.text[:800]}")
+                        messages.append(f"<b>📡 {channel.split('/')[-1]}:</b>
+<b>{funny}</b>
+
+{msg.text[:800]}")
 
                 if msg.media and isinstance(msg.media, MessageMediaPhoto):
-                    messages.append(f"🗺 Карта або фото з {channel.split('/')[-1]} — подивись сам.")
+                    messages.append(f"🗺 <b>Карта або фото з {channel.split('/')[-1]}</b> — подивись сам.")
 
                 if text_matched or msg.media:
                     last_messages[channel] = msg.id
@@ -112,19 +118,15 @@ async def fetch_latest_posts():
 
 # 🚀 Запуск бота
 async def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app: Application = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.Regex("^(Ситуація ⚠️)$"), situation))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown))
-    print("✅ Бот Шахедик запущено. Слухаємо канали.")
+    print("✅ Бот Шахедик запущено.")
     await app.run_polling()
 
 # 🟢 Запускаємо
 if __name__ == '__main__':
     import nest_asyncio
     nest_asyncio.apply()
-    asyncio.get_event_loop().run_until_complete(main())
-
-
-
-
+    asyncio.run(main())
