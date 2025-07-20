@@ -1,29 +1,23 @@
-import asyncio
 import logging
-import random
-from telethon import TelegramClient
+import asyncio
+from telegram import Update, Bot
+from telegram.constants import ParseMode
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telethon.sync import TelegramClient
 from telethon.tl.types import MessageMediaPhoto
-from telethon.errors import SessionPasswordNeededError
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import (
-    Application,
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters
-)
+from telethon.tl.functions.messages import GetHistoryRequest
+import nest_asyncio
 
-# 🔐 Дані для Telethon
+nest_asyncio.apply()
+
+# Дані для Telegram API
 api_id = 26549615
 api_hash = 'f43d6245868e5bae41c40872fb873dec'
-phone_number = '+380500290291'
+bot_token = '7395027911:AAGkiRcvxs8hP878uv9nvo5mGwDe39loxFg'
+target_chat_id = None  # буде встановлено під час /start
 
-# 🤖 Токен бота
-BOT_TOKEN = '7395027911:AAGkiRcvxs8hP878uv9nvo5mGwDe39loxFg'
-
-# 📡 Канали для моніторингу
-CHANNELS = [
+# Канали для перевірки
+channels = [
     'https://t.me/DeepStateUA',
     'https://t.me/RVvoenkor',
     'https://t.me/sentdefender',
@@ -31,103 +25,78 @@ CHANNELS = [
     'https://t.me/vanek_nikolaev'
 ]
 
-# 🧠 Запамʼятовуємо останні ID повідомлень
-last_messages = {}
+# Ключові слова для фільтрації
+keywords = ['шахед', 'шахеди', 'Shahed', 'Shaheds', 'дрон', 'ракета', 'ракети', 'прильот', 'тривога', 'повітряна', 'вибух', 'київ', 'карта', 'іскандер', 'кінжал', 'x-101', 'x101']
+
+# Гумористичні фрази
+jokes = [
+    '🧻 Гуркотять погані шахедики!',
+    '🔥 Горєшнік говнєшнік знову активізувався!',
+    '🛑 Геть смерть і воші!',
+    '💩 Іскандери на горизонті — тримай труси!',
+    '☠️ Нехай Бог охороняє всіх людей!',
+    '🧠 Ракетна дурня знову в ефірі!',
+    '🚽 Увімкни VPN і молись!',
+    '😂 Смійся, бо ліпше вже не стане!',
+    '🌪️ Смерчі дурні — але ми не дурні!'
+]
+
+# Налаштування логів
 logging.basicConfig(level=logging.INFO)
 
-# ▶️ /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [[KeyboardButton("Ситуація ⚠️")]]
-    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        "👋 Привіт! Я бот Шахедик. Натисни кнопку 'Ситуація', щоб перевірити обстановку.",
-        reply_markup=markup
-    )
+# Ініціалізація Telethon-клієнта
+telethon_client = TelegramClient('anon', api_id, api_hash)
 
-# 🛑 Unknown текст
-async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Просто натисни кнопку 'Ситуація'. Я не читаю повідомлення.")
 
-# 📡 Реакція на кнопку
-async def situation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔎 Перевіряю повідомлення з каналів...")
-    messages = await fetch_latest_posts()
-    if messages:
-        for msg in messages:
-            await update.message.reply_text(msg, parse_mode='HTML')
-    else:
-        await update.message.reply_text("✅ Все спокійно, нічого нового не зафіксовано.")
-
-# 📥 Отримання новин з каналів (з гумором та фільтром)
-async def fetch_latest_posts():
-    client = TelegramClient('anon_session', api_id, api_hash)
-    await client.connect()
-    messages = []
-
-    keywords = ['шахед', 'шаходрон', 'дрон', 'ракета', 'кінжал', 'іскандер', 'удар', 'приліт', 'карта', 'тривога']
-    humor = [
-        'Погані шахедики знову летять 😒',
-        'Горєшнік говнєшнік десь в дорозі ✈️',
-        'Геть смерть і воші — сховайся, друже 🐀',
-        'Нічна карта прилетів — романтика...',
-        'Ракетна вечеря — не для нас 😬',
-        'Щось мчить... мабуть не голуб миру 🕊️',
-        'Летить, але не сюрприз від Санти 🎅',
-    ]
-
-    if not await client.is_user_authorized():
+async def fetch_and_send_messages(bot: Bot):
+    await telethon_client.start()
+    for url in channels:
+        channel = url.split('/')[-1]
         try:
-            await client.send_code_request(phone_number)
-            code = input("Введи код з Telegram: ")
-            await client.sign_in(phone_number, code)
-        except SessionPasswordNeededError:
-            pw = input("Telegram просить пароль (2FA): ")
-            await client.sign_in(password=pw)
+            entity = await telethon_client.get_entity(channel)
+            history = await telethon_client(GetHistoryRequest(
+                peer=entity,
+                limit=5,
+                offset_date=None,
+                offset_id=0,
+                max_id=0,
+                min_id=0,
+                add_offset=0,
+                hash=0
+            ))
 
-    for channel in CHANNELS:
-        try:
-            entity = await client.get_entity(channel)
-            async for msg in client.iter_messages(entity, limit=5):
-                if msg.id == last_messages.get(channel):
-                    break
+            for msg in reversed(history.messages):
+                text = msg.message.lower() if hasattr(msg, 'message') and msg.message else ''
+                if any(kw in text for kw in keywords):
+                    caption = f"<b>📡 {channel}:</b>\n{text[:800]}"
+                    joke = f"\n\n<b>{jokes[hash(text) % len(jokes)]}</b>"
 
-                text_matched = False
-                if msg.text:
-                    lower_text = msg.text.lower()
-                    if any(kw in lower_text for kw in keywords):
-                        if 'https://t.me/' in lower_text or 'підписуйтесь' in lower_text:
-                            continue  # прибираємо рекламу
-                        text_matched = True
-                        funny = random.choice(humor)
-                        messages.append(f"<b>📡 {channel.split('/')[-1]}:</b>\n<b>{funny}</b>\n\n{msg.text[:800]}")
-
-<b>{funny}</b>
-
-{msg.text[:800]}")
-
-                if msg.media and isinstance(msg.media, MessageMediaPhoto):
-                    messages.append(f"🗺 <b>Карта або фото з {channel.split('/')[-1]}</b> — подивись сам.")
-
-                if text_matched or msg.media:
-                    last_messages[channel] = msg.id
+                    if target_chat_id:
+                        if msg.media and isinstance(msg.media, MessageMediaPhoto):
+                            photo = await telethon_client.download_media(msg.media)
+                            with open(photo, 'rb') as photo_file:
+                                await bot.send_photo(chat_id=target_chat_id, photo=photo_file)
+                        await bot.send_message(chat_id=target_chat_id, text=caption + joke, parse_mode=ParseMode.HTML)
 
         except Exception as e:
-            messages.append(f"⚠️ Не вдалось прочитати {channel}: {e}")
+            print(f'Помилка з каналом {channel}: {e}')
 
-    await client.disconnect()
-    return messages
 
-# 🚀 Запуск бота
-async def main():
-    app: Application = ApplicationBuilder().token(BOT_TOKEN).build()
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global target_chat_id
+    target_chat_id = update.effective_chat.id
+    await context.bot.send_message(chat_id=target_chat_id, text="✅ Шахедик увімкнено. Очікуй свіжі жарти та дрони.")
+    while True:
+        await fetch_and_send_messages(context.bot)
+        await asyncio.sleep(60)
+
+
+def main():
+    app = ApplicationBuilder().token(bot_token).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.Regex("^(Ситуація ⚠️)$"), situation))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown))
-    print("✅ Бот Шахедик запущено.")
-    await app.run_polling()
+    app.run_polling()
 
-# 🟢 Запускаємо
+
 if __name__ == '__main__':
-    import nest_asyncio
-    nest_asyncio.apply()
-    asyncio.run(main())
+    main()
+
