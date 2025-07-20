@@ -99,7 +99,7 @@ async def fetch_latest_posts():
                             continue  # прибираємо рекламу
                         text_matched = True
                         funny = random.choice(humor)
-                        messages.append(f"<b>📡 {channel.split('/')[-1]}:</b>
+                        messages.append(f"<b>📡 {channel.split('/')[-1]}:</b>)
 <b>{funny}</b>
 
 {msg.text[:800]}")
