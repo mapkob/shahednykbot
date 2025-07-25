@@ -1,18 +1,18 @@
 import asyncio
 import logging
 import os
+import random
 from telethon import TelegramClient, events
 from telegram import Bot
-import random
 
 # 🔐 Конфігурація
 api_id = 26549615
 api_hash = 'f43d6245868e5bae41c40872fb873dec'
+SESSION_NAME = 'anon'
 bot_token = '7395027911:AAGkiRcvxs8hP878uv9nvo5mGwDe39loxFg'
-chat_id = -2416827567
-  # 👈 заміни на ID своєї групи
+chat_id = -2416827567  # 👈 заміни на ID своєї групи
 
-client = TelegramClient('anon', api_id, api_hash)
+client = TelegramClient(SESSION_NAME, api_id, api_hash)
 bot = Bot(token=bot_token)
 
 # 🔑 Ключові слова
@@ -86,28 +86,22 @@ jokes_volyn = [
     '📍 Вітаємо у Волинській зоні турбулентності',
 ]
 
-def get_joke(message_text):
-    volyn_keywords = ['волин', 'луцьк', 'ковель', 'володимир', 'волинська']
-    lower_msg = message_text.lower()
-    if any(keyword in lower_msg for keyword in volyn_keywords):
-        return random.choice(jokes_volyn)
-    return random.choice(jokes_default)
-
 recent_ids = set()
 
-# 📦 Обробка повідомлень
 @client.on(events.NewMessage)
 async def handler(event):
     try:
         if event.id in recent_ids:
             return
         recent_ids.add(event.id)
+
         text = event.message.message or ''
         text_lower = text.lower()
 
         # ❌ Фільтр спаму
         if any(bad in text_lower for bad in banwords):
             return
+
         # ✅ Фільтр шахедів
         if not any(word in text_lower for word in keywords):
             return
@@ -119,12 +113,7 @@ async def handler(event):
             os.remove(file)
 
         # 🧠 Вибір жарту
-        if 'волин' in text_lower or 'луцьк' in text_lower or 'ковель' in text_lower:
-            joke = random.choice(jokes_volyn)
-        elif text.count('!') >= 3:
-            joke = '🚨 Щось стрьомне летить! Притиснись до бетону!'
-        else:
-            joke = random.choice(jokes_default)
+        joke = random.choice(jokes_volyn if any(city in text_lower for city in ['волин', 'луцьк', 'ковель']) else jokes_default)
 
         # 📤 Відправка в групу
         await bot.send_message(chat_id=chat_id, text=f"<b>{joke}</b>\n\n{text}", parse_mode='HTML')
@@ -132,7 +121,6 @@ async def handler(event):
     except Exception as e:
         logging.error(f'❌ Error: {e}')
 
-# 🚀 Запуск
 async def main():
     await client.start()
     print('✅ Shahedyk запущено.')
