@@ -1,88 +1,97 @@
-
 import asyncio
-import logging
-from telethon import TelegramClient
-from telethon.tl.types import MessageMediaPhoto
-from telethon.errors import SessionPasswordNeededError
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
-from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-import nest_asyncio
-import os
 import random
+import logging
+from telegram import Bot
+from telegram.constants import ParseMode
+from telegram.ext import Application, CommandHandler
+from telethon import TelegramClient, events
+from telethon.tl.types import MessageMediaPhoto
+import os
 
-# Дані доступу
-api_id = 26549615
-api_hash = "f43d6245868e5bae41c40872fb873dec"
-bot_token = "7395027911:AAGkiRcvxs8hP878uv9nvo5mGwDe39loxFg"
+# 🔐 Конфіденційні змінні
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+CHANNELS = ['DeepStateUA', 'RVvoenkor', 'sentdefender', 'PpoUaRadar', 'vanek_nikolaev']
 
-# Канали для моніторингу
-channels = [
-    "https://t.me/DeepStateUA",
-    "https://t.me/RVvoenkor",
-    "https://t.me/sentdefender",
-    "https://t.me/PpoUaRadar",
-    "https://t.me/vanek_nikolaev"
-]
+# 🧠 Ключові слова, які бот вважає "важливими"
+keywords = ['шахед', 'ракета', 'іскандер', 'кінжал', 'дрон', 'бпла', 'х-101', 'загроза', 'повітряна тривога', 'летить', 'ппо']
 
-keywords = ["шахед", "шахеди", "дрон", "ракета", "ракети", "тривога", "прильот", "вибух", "іскандер", "кінжал", "смерч", "торнадо", "гради", "повітряна", "ядерна"]
-
-# Заміна фраз для гумору
+# 😂 Гумористичні коментарі
 jokes = [
-    "🧠 <b>Гумор бота</b>: погані шахедики знову літають, а ми тримаємось!",
-    "🤣 <b>Гумор</b>: знову ці мухожуки прилетіли! Де ракетка?",
-    "🔥 <b>Коментар</b>: час сховатись у ванні та прикинутись мокрою тряпкою.",
-    "📡 <b>Звіт</b>: тривога, бо ракети вирішили трохи політати.",
-    "💩 <b>Інфа</b>: шахеди знову в режимі дурки — бережи голову!",
+    '🚀 Шахедик вилетів — тримай капелюха!',
+    '🧠 ППО працює, а ти працюй над собою!',
+    '💩 Летить гівно — як завжди по графіку!',
+    '🧻 Прилетіла ср...а — тримай туалет!',
+    '🪖 Кінжал летить — заховайся в каструлю!',
+    '🔥 Ракета на підльоті — не панікуй, гори спокійно!',
+    '🫣 Знову? Та скільки можна!',
+    '😵 Шахедик прилетів привітати тебе з ранком!',
+    '🎯 Надіюсь, сьогодні пролетить мимо.',
+    '📡 Локатор сказав — шось летить... а що — фіг його знає.'
 ]
 
-# Стартова клавіатура
-keyboard = [[KeyboardButton("Ситуація")]]
-reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+# ⚙️ Telegram боти
+bot = Bot(token=BOT_TOKEN)
+client = TelegramClient('session', API_ID, API_HASH)
 
-# Ініціалізація Telegram бота
-app = ApplicationBuilder().token(bot_token).build()
+# 🧹 Фільтрація повідомлення
+def is_alerting_text(text):
+    text_lower = text.lower()
+    return any(word in text_lower for word in keywords)
 
-# Ініціалізація Telethon клієнта
-nest_asyncio.apply()
-client = TelegramClient("anon", api_id, api_hash)
+def clean_text(text):
+    lines = text.split('\n')
+    clean_lines = [line for line in lines if not line.lower().startswith('підписуйся') and 'telegram' not in line.lower()]
+    return '\n'.join(clean_lines)
 
-# /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Вітаю! Я бот Шахедик 🤖. Натисни 'Ситуація', щоб дізнатись останні новини.", reply_markup=reply_markup)
+# 🟢 Обробка повідомлень із каналів
+@client.on(events.NewMessage(chats=CHANNELS))
+async def handler(event):
+    try:
+        message = event.message
+        text = message.message or ""
+        if is_alerting_text(text):
+            cleaned = clean_text(text)
+            joke = f"<b>{random.choice(jokes)}</b>"
+            full_message = f"{joke}\n\n{cleaned}" if cleaned else joke
 
-# Обробка кнопки "Ситуація"
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.text == "Ситуація":
-        messages = []
-        media = []
+            # Відправити текст
+            await bot.send_message(chat_id='@Shahednykbot', text=full_message, parse_mode=ParseMode.HTML)
 
-        async with client:
-            for channel in channels:
-                try:
-                    entity = await client.get_entity(channel)
-                    async for msg in client.iter_messages(entity, limit=10):
-                        if msg.text and any(word in msg.text.lower() for word in keywords):
-                            if not msg.text.startswith("🔞") and "@" not in msg.text:
-                                messages.append(f"<b>📡 {channel.split('/')[-1]}:</b>
-{msg.text[:800]}")
-                            if msg.media and isinstance(msg.media, MessageMediaPhoto):
-                                media.append(msg.media)
+            # Відправити фото, якщо є
+            if message.media and isinstance(message.media, MessageMediaPhoto):
+                file = await message.download_media()
+                await bot.send_photo(chat_id='@Shahednykbot', photo=open(file, 'rb'))
+                os.remove(file)
 
-                except Exception as e:
-                    print(f"❌ Помилка в {channel}: {e}")
+    except Exception as e:
+        logging.error(f"❌ Помилка при обробці повідомлення: {e}")
 
-        if messages:
-            await update.message.reply_text(random.choice(jokes), parse_mode=ParseMode.HTML)
-            for text in messages[:5]:
-                await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-        else:
-            await update.message.reply_text("Немає актуальної інформації 💤", reply_markup=reply_markup)
+# 🔘 Обробник команди /start
+async def start(update, context):
+    await update.message.reply_text("👋 Я Шахедик-бот. Тисни /situation, якщо хочеш дізнатися, що летить.")
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT, handle_message))
+# 🧨 Обробник команди /situation
+async def situation(update, context):
+    text = random.choice(jokes)
+    await update.message.reply_text(f"📡 Поточна ситуація:\n\n<b>{text}</b>", parse_mode=ParseMode.HTML)
 
-# Запуск
-if __name__ == "__main__":
-    client.start()
-    app.run_polling()
+# 🔁 Запуск усіх сервісів
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("situation", situation))
+
+    # Запуск Telethon
+    await client.start()
+    await client.connect()
+    logging.info("✅ Telethon підʼєднано")
+
+    # Запуск бота
+    asyncio.create_task(app.run_polling())
+    await client.run_until_disconnected()
+
+if __name__ == '__main__':
+    asyncio.run(main())
