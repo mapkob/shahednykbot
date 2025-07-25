@@ -1,7 +1,6 @@
 services:
   - type: web
     name: shahednykbot
-    runtime: python
-    buildCommand: ""
-    startCommand: "python shahednykbot.py"
-    pythonVersion: 3.10
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python shahednykbot.py
