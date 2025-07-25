@@ -12,7 +12,8 @@ SESSION_NAME = 'anon'
 bot_token = '7395027911:AAGkiRcvxs8hP878uv9nvo5mGwDe39loxFg'
 chat_id = -2416827567  # 👈 заміни на ID своєї групи
 
-client = TelegramClient(SESSION_NAME, api_id, api_hash)
+client = TelegramClient(SESSION_NAME, api_id, api_hash, phone=lambda: os.getenv('TELEGRAM_PHONE'))
+
 bot = Bot(token=bot_token)
 
 # 🔑 Ключові слова
